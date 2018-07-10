@@ -37,9 +37,15 @@
 
 #include "e1000x_common.h"
 
+FILE *ddd;
+
+#define D(fmt, args...)	do {					\
+	fprintf(ddd, "%s() " fmt "\n", __func__, ## args);       \
+} while (0)
+
 static const uint8_t bcast[] = {0xff, 0xff, 0xff, 0xff, 0xff, 0xff};
 
-/* #define E1000_DEBUG */
+#define E1000_DEBUG 1
 
 #ifdef E1000_DEBUG
 enum {
@@ -51,12 +57,18 @@ enum {
 #define DBGBIT(x)    (1<<DEBUG_##x)
 static int debugflags = DBGBIT(TXERR) | DBGBIT(GENERAL);
 
-#define DBGOUT(what, fmt, ...) do { \
-    if (debugflags & DBGBIT(what)) \
-        fprintf(stderr, "e1000: " fmt, ## __VA_ARGS__); \
-    } while (0)
+/* #define DBGOUT(what, fmt, ...) do { \ */
+/*     if (debugflags & DBGBIT(what)) \ */
+/*         fprintf(stderr, "e1000: " fmt, ## __VA_ARGS__); \ */
+/*     } while (0) */
+
+#define DBGOUT(what, fmt, args...)	do {                     \
+	fprintf(ddd, "%s() " fmt "\n", __func__, ## args);       \
+} while (0)
+
+
 #else
-#define DBGOUT(what, fmt, ...) do {} while (0)
+#error "xXX"
 #endif
 
 #define IOPORT_SIZE       0x40
@@ -268,6 +280,8 @@ set_interrupt_cause(E1000State *s, int index, uint32_t val)
     uint32_t pending_ints;
     uint32_t mit_delay;
 
+    D("%x", val);
+
     s->mac_reg[ICR] = val;
 
     /*
@@ -292,6 +306,7 @@ set_interrupt_cause(E1000State *s, int index, uint32_t val)
          * RADV; relative timers based on TIDV and RDTR are not implemented.
          */
         if (s->mit_timer_on) {
+            D("xx");
             return;
         }
         if (chkflag(MIT)) {
@@ -326,6 +341,7 @@ set_interrupt_cause(E1000State *s, int index, uint32_t val)
     }
 
     s->mit_irq_level = (pending_ints != 0);
+    D("mit_irq_level=%d", s->mit_irq_level);
     pci_set_irq(d, s->mit_irq_level);
 }
 
@@ -333,6 +349,8 @@ static void
 e1000_mit_timer(void *opaque)
 {
     E1000State *s = opaque;
+
+    D("");
 
     s->mit_timer_on = 0;
     /* Call set_interrupt_cause to update the irq level (if necessary). */
@@ -363,6 +381,8 @@ static void e1000_reset(void *opaque)
     E1000BaseClass *edc = E1000_DEVICE_GET_CLASS(d);
     uint8_t *macaddr = d->conf.macaddr.a;
 
+    D("");
+
     timer_del(d->autoneg_timer);
     timer_del(d->mit_timer);
     d->mit_timer_on = 0;
@@ -386,6 +406,7 @@ static void e1000_reset(void *opaque)
 static void
 set_ctrl(E1000State *s, int index, uint32_t val)
 {
+    D("%x", val);
     /* RST is self clearing */
     s->mac_reg[CTRL] = val & ~E1000_CTRL_RST;
 }
@@ -725,6 +746,8 @@ start_xmit(E1000State *s)
     struct e1000_tx_desc desc;
     uint32_t tdh_start = s->mac_reg[TDH], cause = E1000_ICS_TXQE;
 
+    D("");
+
     if (!(s->mac_reg[TCTL] & E1000_TCTL_EN)) {
         DBGOUT(TX, "tx disabled\n");
         return;
@@ -774,7 +797,7 @@ receive_filter(E1000State *s, const uint8_t *buf, int size)
             return 0;
     }
 
-    if (!isbcast && !ismcast && (rctl & E1000_RCTL_UPE)) { /* promiscuous ucast */
+    if (!isbcast && !ismcast && (rctl & E1000_RCTL_UPE)) { /* promiscuous ucast *///e1000x_inc_reg_if_not_full(s->mac_reg, MPRC);
         return 1;
     }
 
@@ -867,9 +890,13 @@ e1000_receive_iov(NetClientState *nc, const struct iovec *iov, int iovcnt)
     size_t desc_size;
     size_t total_size;
 
+    D("");
+
     if (!e1000x_hw_rx_enabled(s->mac_reg)) {
         return -1;
     }
+
+        D("2");
 
     /* Pad to minimum Ethernet frame length */
     if (size < sizeof(min_buf)) {
@@ -958,13 +985,14 @@ e1000_receive_iov(NetClientState *nc, const struct iovec *iov, int iovcnt)
                 desc.status &= ~E1000_RXD_STAT_EOP;
             }
         } else { // as per intel docs; skip descriptors with null buf addr
-            DBGOUT(RX, "Null RX descriptor!!\n");
+            D("Null RX descriptor!!\n");
         }
         pci_dma_write(d, base, &desc, sizeof(desc));
 
         if (++s->mac_reg[RDH] * sizeof(desc) >= s->mac_reg[RDLEN])
             s->mac_reg[RDH] = 0;
         /* see comment in start_xmit; same here */
+
         if (s->mac_reg[RDH] == rdh_start ||
             rdh_start >= s->mac_reg[RDLEN] / sizeof(desc)) {
             DBGOUT(RXERR, "RDH wraparound @%x, RDT %x, RDLEN %x\n",
@@ -972,6 +1000,7 @@ e1000_receive_iov(NetClientState *nc, const struct iovec *iov, int iovcnt)
             set_ics(s, 0, E1000_ICS_RXO);
             return -1;
         }
+
     } while (desc_offset < total_size);
 
     e1000x_update_rx_total_stats(s->mac_reg, size, total_size);
@@ -1096,6 +1125,7 @@ set_dlen(E1000State *s, int index, uint32_t val)
 static void
 set_tctl(E1000State *s, int index, uint32_t val)
 {
+    D("%x", val);
     s->mac_reg[index] = val;
     s->mac_reg[TDT] &= 0xffff;
     start_xmit(s);
@@ -1104,13 +1134,15 @@ set_tctl(E1000State *s, int index, uint32_t val)
 static void
 set_icr(E1000State *s, int index, uint32_t val)
 {
-    DBGOUT(INTERRUPT, "set_icr %x\n", val);
+    D("%x", val);
+    //DBGOUT(INTERRUPT, "set_icr %x\n", val);
     set_interrupt_cause(s, 0, s->mac_reg[ICR] & ~val);
 }
 
 static void
 set_imc(E1000State *s, int index, uint32_t val)
 {
+    D("%x", val);
     s->mac_reg[IMS] &= ~val;
     set_ics(s, 0, 0);
 }
@@ -1118,6 +1150,7 @@ set_imc(E1000State *s, int index, uint32_t val)
 static void
 set_ims(E1000State *s, int index, uint32_t val)
 {
+    D("%x", val);
     s->mac_reg[IMS] |= val;
     set_ics(s, 0, 0);
 }
@@ -1267,6 +1300,8 @@ e1000_mmio_write(void *opaque, hwaddr addr, uint64_t val,
     E1000State *s = opaque;
     unsigned int index = (addr & 0x1ffff) >> 2;
 
+    D("");
+
     if (index < NWRITEOPS && macreg_writeops[index]) {
         if (!(mac_reg_access[index] & MAC_ACCESS_FLAG_NEEDED)
             || (s->compat_flags & (mac_reg_access[index] >> 2))) {
@@ -1293,6 +1328,8 @@ e1000_mmio_read(void *opaque, hwaddr addr, unsigned size)
 {
     E1000State *s = opaque;
     unsigned int index = (addr & 0x1ffff) >> 2;
+
+    D("");
 
     if (index < NREADOPS && macreg_readops[index]) {
         if (!(mac_reg_access[index] & MAC_ACCESS_FLAG_NEEDED)
@@ -1327,6 +1364,9 @@ static uint64_t e1000_io_read(void *opaque, hwaddr addr,
 {
     E1000State *s = opaque;
 
+    D("");
+    
+
     (void)s;
     return 0;
 }
@@ -1335,6 +1375,7 @@ static void e1000_io_write(void *opaque, hwaddr addr,
                            uint64_t val, unsigned size)
 {
     E1000State *s = opaque;
+    D("");
 
     (void)s;
 }
@@ -1608,6 +1649,7 @@ e1000_mmio_setup(E1000State *d)
         E1000_MDIC, E1000_ICR, E1000_ICS, E1000_IMS,
         E1000_IMC, E1000_TCTL, E1000_TDT, PNPMMIO_SIZE
     };
+    D("");
 
     memory_region_init_io(&d->mmio, OBJECT(d), &e1000_mmio_ops, d,
                           "e1000-mmio", PNPMMIO_SIZE);
@@ -1724,6 +1766,7 @@ static void e1000_class_init(ObjectClass *klass, void *data)
     PCIDeviceClass *k = PCI_DEVICE_CLASS(klass);
     E1000BaseClass *e = E1000_DEVICE_CLASS(klass);
     const E1000Info *info = data;
+    D("");
 
     k->realize = pci_e1000_realize;
     k->exit = pci_e1000_uninit;

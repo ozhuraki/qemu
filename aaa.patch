@@ -1,0 +1,15 @@
+diff --git a/gdbstub.c b/gdbstub.c
+index 2a94030..5749efe 100644
+--- a/gdbstub.c
++++ b/gdbstub.c
+@@ -668,5 +668,10 @@ static int gdb_read_register(CPUState *cpu, uint8_t *mem_buf, int reg)
+             return r->get_reg(env, mem_buf, reg - r->base_reg);
+         }
+     }
++#ifdef TARGET_X86_64
++ return 8;
++#elif TARGET_I386
++ return 4;
++#endif
+     return 0;
+ }

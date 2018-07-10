@@ -48,6 +48,12 @@
 
 #include "trace.h"
 
+extern FILE *ddd;
+
+#define D(fmt, args...)	do {					\
+	fprintf(ddd, "%s() " fmt "\n", __func__, ## args);       \
+} while (0)
+
 #define E1000E_MIN_XITR     (500) /* No more then 7813 interrupts per
                                      second according to spec 10.2.4.2 */
 #define E1000E_MAX_TX_FRAGS (64)
@@ -1769,6 +1775,8 @@ e1000e_link_down(E1000ECore *core)
 static inline void
 e1000e_set_phy_ctrl(E1000ECore *core, int index, uint16_t val)
 {
+        D("");
+ 
     /* bits 0-5 reserved; MII_CR_[RESTART_AUTO_NEG,RESET] are self clearing */
     core->phy[0][PHY_CTRL] = val & ~(0x3f |
                                      MII_CR_RESET |
@@ -1825,6 +1833,8 @@ e1000e_core_set_link_status(E1000ECore *core)
 static void
 e1000e_set_ctrl(E1000ECore *core, int index, uint32_t val)
 {
+        D("");
+ 
     trace_e1000e_core_ctrl_write(index, val);
 
     /* RST is self clearing */
@@ -2400,6 +2410,7 @@ static void
 e1000e_set_dlen(E1000ECore *core, int index, uint32_t val)
 {
     core->mac[index] = val & E1000_XDLEN_MASK;
+    D("TDLEN=%x", core->mac[index]);
 }
 
 static void
@@ -2412,6 +2423,9 @@ static void
 e1000e_set_tctl(E1000ECore *core, int index, uint32_t val)
 {
     E1000E_TxRing txr;
+
+        D("");
+ 
     core->mac[index] = val;
 
     if (core->mac[TARC0] & E1000_TARC_ENABLE) {
@@ -2431,6 +2445,9 @@ e1000e_set_tdt(E1000ECore *core, int index, uint32_t val)
     E1000E_TxRing txr;
     int qidx = e1000e_mq_queue_idx(TDT, index);
     uint32_t tarc_reg = (qidx == 0) ? TARC0 : TARC1;
+
+    D("");
+    
 
     core->mac[index] = val & 0xffff;
 
@@ -2640,7 +2657,8 @@ static uint32_t
 e1000e_get_ctrl(E1000ECore *core, int index)
 {
     uint32_t val = core->mac[CTRL];
-
+    D("");
+ 
     trace_e1000e_link_read_params(
         !!(val & E1000_CTRL_ASDE),
         (val & E1000_CTRL_SPD_SEL) >> E1000_CTRL_SPD_SHIFT,

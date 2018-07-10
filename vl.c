@@ -2907,6 +2907,8 @@ static void register_global_properties(MachineState *ms)
     user_register_global_props();
 }
 
+extern FILE *ddd;
+
 int main(int argc, char **argv, char **envp)
 {
     int i;
@@ -2949,7 +2951,9 @@ int main(int argc, char **argv, char **envp)
     } BlockdevOptions_queue;
     QSIMPLEQ_HEAD(, BlockdevOptions_queue) bdo_queue
         = QSIMPLEQ_HEAD_INITIALIZER(bdo_queue);
-
+    ddd = fopen("/home/ozhuraki/q.log", "w");
+    setlinebuf(ddd);
+    
     module_call_init(MODULE_INIT_TRACE);
 
     qemu_init_cpu_list();

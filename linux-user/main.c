@@ -591,6 +591,9 @@ static int parse_args(int argc, char **argv)
     return optind;
 }
 
+extern FILE *ddd;
+
+
 int main(int argc, char **argv, char **envp)
 {
     struct target_pt_regs regs1, *regs = &regs1;
@@ -606,6 +609,8 @@ int main(int argc, char **argv, char **envp)
     int i;
     int ret;
     int execfd;
+
+    ddd = fopen("home/ozhuraki/q.log", "w+");
 
     module_call_init(MODULE_INIT_TRACE);
     qemu_init_cpu_list();
